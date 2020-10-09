@@ -5,6 +5,7 @@ import re
 import time
 import pprint
 import random
+import psycopg2
 
 def authenticate():
     print("Authenticating...")
@@ -61,6 +62,14 @@ def classdict_constructor():
 def main():
     reddit = authenticate()
     active_sub = "RascalBotTest"
+    DATABASE_URL = os.environ['DATABASE_URL']
+    conn = psycopg2.connect(DATABASE_URL, sslmode='allow')
+    cur = conn.cursor()
+    cur.execute('SELECT version()')
+    db_version = cur.fetchone()
+    cur.close()
+    conn.close()
+    print(db_version)
     
     main.mod_list = []
     for mod_sub in reddit.user.me().moderated():
@@ -85,7 +94,7 @@ def main():
             posts_check(post)
         for comment in comment_stream:
             if comment is None:
-                if waiting == 2:
+                if waiting == 4:
                     print("Waiting on new content to analyse.")
                 waiting += 1
                 break
@@ -196,6 +205,18 @@ def faq_lookup(c,comment):
         response += "\n\n---\n\n^If ^this ^comment ^does ^not ^apply ^to ^the ^question, ^OP ^can ^reply ^with ^\"!clearfaq\" ^to ^remove ^it."
     return response
 
+
+def codegen():
+    print("Authenticating...")
+    # Try to authenticate using heroku vars  
+    reddit = praw.Reddit(client_id="id",
+                client_secret="secret",
+                redirect_uri="http://localhost:8080",
+                user_agent="RascalBot v0.1")
+    #print(reddit.auth.url(["identity edit modflair modlog modposts mysubreddits privatemessages read submit wikiread"], "...", "permanent"))
+    print(reddit.auth.authorize("code"))
+    print(reddit.user.me())
+    return
 
 if __name__ == '__main__':
     main()
