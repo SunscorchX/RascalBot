@@ -9,17 +9,12 @@ import psycopg2
 
 def authenticate():
     print("Authenticating...")
-    try:
-        # Try to authenticate using heroku vars  
-        reddit = praw.Reddit(client_id=os.environ['CLIENT_ID'],
+    # Try to authenticate using heroku vars  
+    reddit = praw.Reddit(client_id=os.environ['CLIENT_ID'],
                      client_secret=os.environ['CLIENT_SECRET'],
                      refresh_token=os.environ['REFRESH_TOKEN'],
                      user_agent="RascalBot v0.1")
-    except:
-        # Import praw.ini for local testing (AppData/Roaming)
-        reddit = praw.Reddit('RascalBot', user_agent="RascalBot v0.1")
     print("Authenticated as {}".format(reddit.user.me()))
-
     return reddit
 
 
