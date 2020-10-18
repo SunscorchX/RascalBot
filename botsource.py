@@ -137,9 +137,8 @@ def posts_check(new_post):
             print("Detected post " + new_post.id + " as new Art submission.")
             this_comment = bot_reply(new_post, "Hi! RascalBot has removed your art post until you link your source!\n\n"
                                      "Please reply to this comment with a link to the source. If the post is OC,"
-                                     " please respond with \"I made this\".\n\n---")
+                                     " please respond with \"I made this\".\n\n---", True)
             print("Stickying source request (" + this_comment.id + ") and hiding post.")
-            this_comment.mod.distinguish(sticky=True)
             new_post.mod.remove()
             print("Saving comment ID to database.")
             cur = main.conn.cursor()
@@ -149,14 +148,13 @@ def posts_check(new_post):
         # Add generic FAQ response to all posts tagged "Question"
         elif "Question" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Question.")
-            this_comment = bot_reply(new_post, "Beep boop. I noticed that you're asking a question!\n\n---")
-            this_comment.mod.distinguish(sticky=True)
+            this_comment = bot_reply(new_post, "Beep boop. I noticed that you're asking a question!\n\n---", True)
             sticky_exists = True
         # Add snark to any post talking about balance
         if "balance" in new_post.title.lower()+new_post.selftext.lower():
             print("Is someone complaining about balance? Respond!")
             bot_reply(new_post,"RascalBot likes this old saying:\n\n> Players are great at finding problems and terrible at finding solutions.\n\n"
-                      "Feedback in the form of proposed changes is less useful than your feelings on the current mechanics.\n\n---").mod.distinguish()
+                      "Feedback in the form of proposed changes is less useful than your feelings on the current mechanics.\n\n---")
     else:
         print("Found post with a sticky. Weird.")
 
@@ -173,16 +171,24 @@ def error_pm(comment,command,eligible):
         "command in the wrong place." + extra_line + "\n\nWatch yourself, eh?")
 
 
-def bot_reply(target,body):
+def bot_reply(target,body,c_sticky=False):
     # Add generic bot footer to all bot comments, return created comment
     body += "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's [^test ^sub ^wiki](http://reddit.com/r/RascalBotTest/wiki/index)."
     reply = target.reply(body)
     reply.disable_inbox_replies()
+    reply.mod.distinguish(sticky=c_sticky)
     return reply
 
 
 def comments_check(new_comment):
     c_submission = new_comment.submission
+    # Construct regex for screenshot bullshit
+    ss_regex = re.compile(r"""
+        (?:((?:can'?t|know|learn|god|fuck|shit|damn?|next\stime).*?)|\s|^)
+        (?:screen\s?shot|print\s?screen)
+        (.*?(?:\?|can'?t|key|button|god|fuck|shit|damn?|next\stime))?
+        """, re.IGNORECASE|re.VERBOSE)
+    ss_match = ss_regex.search(new_comment.body)
     if re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body) and not new_comment.distinguished and not new_comment.removed:
         found_command = re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body).group(1)
         eligible = False
@@ -192,9 +198,8 @@ def comments_check(new_comment):
         if "Question" in c_submission.link_flair_text and faq_response and eligible:
             print("Found FAQ command \"!" + found_command + "\".")
             find_sticky(c_submission,True)
-            faq_comment = bot_reply(new_comment.submission,faq_response)
+            faq_comment = bot_reply(new_comment.submission,faq_response, True)
             print("Stickying FAQ response (" + faq_comment.id + ") and removing command.")
-            faq_comment.mod.distinguish(sticky=True)
             new_comment.mod.remove()
             print("Setting post flair to \"FAQ Response\".")
             c_submission.mod.flair(text="FAQ Response")
@@ -222,7 +227,6 @@ def comments_check(new_comment):
                                                    "RascalBot is happy to help! The result of your request is...\n\n"
                                                    "...\n\n...\n\n...\n\n#" + decision + "!\n\nRascalBot hopes this"
                                                    " helps you get on with your life <3\n\n---")
-                random_comment.mod.distinguish()
                 return
         elif not eligible:
             print("Command author ineligible for use.")
@@ -266,9 +270,12 @@ def comments_check(new_comment):
                 print("Failed to find source info. Replying to comment.")
                 this_comment = bot_reply(new_comment, "RascalBot was unable to detect a link in this message.\n\n"
                                          "If you believe this is a mistake, please send a modmail so the team can fix RascalBot\n\n---")
-                this_comment.mod.distinguish()
         else:
             print("The parent is not being monitored for replies right now.")
+    elif not ss_match is None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
+        print("Found crappy \"screenshot\" comment. Responding.")
+        this_comment = bot_reply(new_comment, "RascalBot senses you might be being a dick about someone not using Print Screen.\n\n"
+                                 "Don't be like that.\n\n---")
     else:
         print("Ignoring boring/distinguished comment.")
         return
