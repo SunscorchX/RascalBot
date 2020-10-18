@@ -9,7 +9,6 @@
 * Refresh Token Authentication - allows bot account to use 2FA, and not store main credentials anywhere!
 * Automatically ignores (approves) any report on a post/comment older than six months.
 * Prints exceptions to server log and continues main loop, rather than crashing.
-* Turns off reply notifications to all bot comments.
 * Distinguishes (sticky optional) and turns off reply notifications to all bot comments.
 
 #### Basic Post Processing:
@@ -23,6 +22,7 @@
 * Allows the OP of an "FAQ Response" post to clear the sticky and restore the original flair if their question is not answered.
 * Looks for "!random" commands and replies appropriately. (**Currently only covers classes/roles**).
 * Sends short error message to anyone using commands incorrectly/making up commands via PM.
+* Replies to any post detected as being a dick about using print screen with a light admonishment.
 
 # Advanced Processing:
 #### Art Post Sourcing:
