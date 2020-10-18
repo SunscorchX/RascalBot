@@ -7,6 +7,7 @@ import pprint
 import random
 import psycopg2
 
+
 def authenticate():
     print("Authenticating...")
     # Try to authenticate using heroku vars  
@@ -22,19 +23,26 @@ def authenticate():
 def find_sticky(this_post,remove=False):
     this_post.comment_limit = 1
     for c_check in this_post.comments:
-        if c_check.stickied:
+        # Pull first comment from forest and check if it is stickied.
+        pprint.pprint(vars(c_check)) 
+        if c_check.stickied and not c_check.removed:
             if remove:
+                # If "remove" boolean true then remove found comment.
                 print("Removing previously stickied comment (" + c_check.id + ").")
                 c_check.mod.remove()
             else:
+                # If not set to remove, just report comment as found. 
                 print("Located sticky comment (" + c_check.id + ").")
+            # Return found comment.
             return c_check
         else:
+            # Play with string for grammatical sense, return None if no sticky
             suffix = "found."
             if remove:
                 suffix = "to remove."
             print("No sticky comment " + suffix)
             return None
+
 
 def classdict_constructor():
     classdict = {
@@ -57,48 +65,70 @@ def classdict_constructor():
 def main():
     reddit = authenticate()
     active_sub = "RascalBotTest"
-    DATABASE_URL = os.environ['DATABASE_URL']
-    conn = psycopg2.connect(DATABASE_URL, sslmode='allow')
-    cur = conn.cursor()
-    cur.execute('SELECT version()')
-    db_version = cur.fetchone()
-    cur.close()
-    conn.close()
-    print(db_version)
     
+    # Database testing script (to be removed)
+    #DATABASE_URL = os.environ['DATABASE_URL']
+    #conn = psycopg2.connect(DATABASE_URL, sslmode='allow')
+    #cur = conn.cursor()
+    #cur.execute('SELECT version()')
+    #db_version = cur.fetchone()
+    #cur.close()
+    #conn.close()
+    
+    # Store list of subreddits moderated by bot
     main.mod_list = []
     for mod_sub in reddit.user.me().moderated():
         main.mod_list.append(mod_sub.display_name)
         
+    # Store root sub for FAQ Wiki
     main.faq_root = reddit.subreddit("WoWAnarchy")
     main.commands = main.faq_root.wiki["faq"].content_md.split(",")
     
+    # Store dictionary object for !random commands
     main.classdict = classdict_constructor()
     
     waiting = 0
     
+    # Iterate through new posts and comments one by one
     post_stream = reddit.subreddit(active_sub).stream.submissions(pause_after=-1, skip_existing=True)
+    flair_stream = reddit.subreddit(active_sub).mod.stream.log(action="editflair", pause_after=-1, skip_existing=True)
+    report_stream = reddit.subreddit(active_sub).mod.stream.reports(pause_after=-1, skip_existing=True)
     comment_stream = reddit.subreddit(active_sub).stream.comments(pause_after=-1, skip_existing=True)
-    
-    while True:
-        for post in post_stream:
-            if post is None:
-                break
-            waiting = 0
-            print("Analysing new post (" + post.id + ").")
-            posts_check(post)
-        for comment in comment_stream:
-            if comment is None:
-                if waiting == 4:
-                    print("Waiting on new content to analyse.")
-                waiting += 1
-                break
-            waiting = 0
-            print("Analysing new comment (" + comment.id + ").")
-            comments_check(comment)
 
+    while True:
+        try:
+            for post in post_stream:
+                if post is None:
+                    break
+                waiting = 0
+                print("Analysing new post (" + post.id + ").")
+                posts_check(post)
+            for flair in flair_stream:
+                if flair is None:
+                    break
+                flair_post = flair.target_fullname.replace("t3_", "")
+                post = reddit.submission(flair_post)
+                print("Detected flair change. Analysing post " + post.id + ".")
+                posts_check(post)
+            for report in report_stream:
+                if report is None:
+                    break
+                print("Detected new report (" + report.id + ").")
+                report_analysis(report)
+            for comment in comment_stream:
+                if comment is None:
+                    if waiting == 4:
+                        print("Waiting on new content to analyse.")
+                    waiting += 1
+                    break
+                waiting = 0
+                print("Analysing new comment (" + comment.id + ").")
+                comments_check(comment)
+        except Exception as err:
+            print(err)
 
 def posts_check(new_post):
+    # Check for existing sticky
     if not find_sticky(new_post):
         if new_post.subreddit.display_name == "WoWAnarchy" or new_post.subreddit.display_name == "RascalBotTest":
             if not new_post.link_flair_text:
@@ -141,7 +171,7 @@ def bot_reply(target,body):
 
 def comments_check(new_comment):
     c_submission = new_comment.submission
-    if re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body) and not new_comment.distinguished:
+    if re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body) and not new_comment.distinguished and not new_comment.removed:
         found_command = re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body).group(1)
         eligible = False
         if new_comment.subreddit.display_name in main.mod_list or (new_comment.author.comment_karma >= 50 and (time.time() - int(new_comment.author.created_utc) >= 604800)):
@@ -164,6 +194,7 @@ def comments_check(new_comment):
             c_submission.mod.flair(text="Question")
             return
         elif "random" in found_command:
+            new_comment.mod.remove()
             choices = []
             trim_command = found_command.replace("random","")
             for name,specs in main.classdict.items():
@@ -187,8 +218,19 @@ def comments_check(new_comment):
         new_comment.mod.remove()
         error_pm(new_comment,found_command,eligible)
     else:
-        print("Ignoring distinguished comment.")
+        print("Ignoring boring/distinguished comment.")
         return
+
+
+def report_analysis(report):
+    content_age = time.time() - report.created_utc
+    #limit = 604800
+    limit = 15768000
+    if content_age >= limit:
+        print("Old-ass report found. Automatically approving.")
+        report.mod.approve()
+    else:
+        print("No automatic action required.")
 
 
 def faq_lookup(c,comment):
@@ -204,11 +246,11 @@ def faq_lookup(c,comment):
 def codegen():
     print("Authenticating...")
     # Try to authenticate using heroku vars  
-    reddit = praw.Reddit(client_id="id",
-                client_secret="secret",
+    reddit = praw.Reddit(client_id=os.environ['CLIENT_ID'],
+                client_secret=os.environ['CLIENT_SECRET'],
                 redirect_uri="http://localhost:8080",
                 user_agent="RascalBot v0.1")
-    #print(reddit.auth.url(["identity edit modflair modlog modposts mysubreddits privatemessages read submit wikiread"], "...", "permanent"))
+    #print(reddit.auth.url(["identity edit modflair modlog modposts mysubreddits privatemessages read report submit wikiread"], "...", "permanent"))
     print(reddit.auth.authorize("code"))
     print(reddit.user.me())
     return
