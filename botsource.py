@@ -24,7 +24,6 @@ def find_sticky(this_post,remove=False):
     this_post.comment_limit = 1
     for c_check in this_post.comments:
         # Pull first comment from forest and check if it is stickied.
-        pprint.pprint(vars(c_check)) 
         if c_check.stickied and not c_check.removed:
             if remove:
                 # If "remove" boolean true then remove found comment.
@@ -64,16 +63,15 @@ def classdict_constructor():
 
 def main():
     reddit = authenticate()
+    reddit.validate_on_submit = True
     active_sub = "RascalBotTest"
     
-    # Database testing script (to be removed)
-    #DATABASE_URL = os.environ['DATABASE_URL']
-    #conn = psycopg2.connect(DATABASE_URL, sslmode='allow')
-    #cur = conn.cursor()
-    #cur.execute('SELECT version()')
-    #db_version = cur.fetchone()
-    #cur.close()
-    #conn.close()
+    print("Opening database connection.")
+    # Open database connection
+    DATABASE_URL = os.environ['DATABASE_URL']
+    main.conn = psycopg2.connect(DATABASE_URL, sslmode='allow')
+    # Set connection to autocommit all queries
+    main.conn.set_session(autocommit=True)
     
     # Store list of subreddits moderated by bot
     main.mod_list = []
@@ -126,17 +124,35 @@ def main():
                 comments_check(comment)
         except Exception as err:
             print(err)
+    # Close database connection if we ever exit loop
+    main.conn.close()
 
 def posts_check(new_post):
     # Check for existing sticky
     if not find_sticky(new_post):
         if not new_post.link_flair_text:
             pass
+        # Hide and respond to all posts tagged "Art"
+        elif "Art" in new_post.link_flair_text:
+            print("Detected post " + new_post.id + " as new Art submission.")
+            this_comment = bot_reply(new_post, "Hi! RascalBot has removed your art post until you link your source!\n\n"
+                                     "Please reply to this comment with a link to the source. If the post is OC,"
+                                     " please respond with \"I made this\".\n\n---")
+            print("Stickying source request (" + this_comment.id + ") and hiding post.")
+            this_comment.mod.distinguish(sticky=True)
+            new_post.mod.remove()
+            print("Saving comment ID to database.")
+            cur = main.conn.cursor()
+            cur.execute("INSERT INTO bot_comments (id, timestamp, action) VALUES (%s, NOW(), %s)",
+                        (this_comment.id, "Source"))
+            cur.close()
+        # Add generic FAQ response to all posts tagged "Question"
         elif "Question" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Question.")
             this_comment = bot_reply(new_post, "Beep boop. I noticed that you're asking a question!\n\n---")
             this_comment.mod.distinguish(sticky=True)
             sticky_exists = True
+        # Add snark to any post talking about balance
         if "balance" in new_post.title.lower()+new_post.selftext.lower():
             print("Is someone complaining about balance? Respond!")
             bot_reply(new_post,"RascalBot likes this old saying:\n\n> Players are great at finding problems and terrible at finding solutions.\n\n"
@@ -148,16 +164,20 @@ def posts_check(new_post):
 def error_pm(comment,command,eligible):
     print("Sending PM to " + comment.author.name + " for trying to use \"!" + command + "\".")
     extra_line = ""
+    # Add extra info to PM if user does not meet command requirements
     if not eligible:
         extra_line = " Additionally, some commands (such as FAQ responses) are restricted to accounts that are over a week old and have more than 50 comment karma."
+    # Send PM to user who did it wrong
     comment.author.message("RascalBot Command Error", "It appears you attempted to use the RascalBot command \"!" + command + "\" in [this comment]("
         + comment.permalink + "), resulting in an error.\n\nThis may be because the command is not recognised by RascalBot, or you tried to use a real "
         "command in the wrong place." + extra_line + "\n\nWatch yourself, eh?")
 
 
 def bot_reply(target,body):
+    # Add generic bot footer to all bot comments, return created comment
     body += "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's [^test ^sub ^wiki](http://reddit.com/r/RascalBotTest/wiki/index)."
     reply = target.reply(body)
+    reply.disable_inbox_replies()
     return reply
 
 
@@ -209,6 +229,46 @@ def comments_check(new_comment):
         print("Removing comment with invalid \"!" + found_command + "\" code.")
         new_comment.mod.remove()
         error_pm(new_comment,found_command,eligible)
+    elif "Art" in c_submission.link_flair_text and new_comment.is_submitter and c_submission.removed:
+        parent_id = re.search(r"t[13]_(.*)", new_comment.parent_id).group(1)
+        # Checking database for comment ID
+        cur = main.conn.cursor()
+        cur.execute("SELECT * FROM bot_comments WHERE id = (%s) AND action = 'Source';", (parent_id,))
+        result = cur.fetchone()
+        cur.close()
+        if not result is None:
+            print("Found art source submission. Analysing content.")
+            link_info = None
+            # Check comment for some sort of link with or without markdown
+            link_parse = re.search(r"((?:\[.*\])|(?:https*:\/\/))\(?((?:https*:\/\/)?[^\s\)]*)\)?(?:\s|$)", new_comment.body)
+            if "I made this" in new_comment.body:
+                link_info = "This art was created by the OP! RascalBot is impressed!"
+            elif not link_parse is None:
+                # Use own markdown for bare link
+                if "http" in link_parse.group(1):
+                    link_info = "[Link to Source](" + link_parse.group(1) + link_parse.group(2) + ")"
+                # Use submitter's markdown for formatted link
+                elif "[" in link_parse.group(1):
+                     link_info = link_parse.group()
+            if not link_info is None:
+                print("Detected source information. Updating sticky & database.")
+                bot_parent = new_comment.parent()
+                bot_parent.edit("Source submitted by " + new_comment.author.name + ":\n\n"
+                                          + link_info + "\n\n---"
+                                          "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's "
+                                          "[^test ^sub ^wiki](http://reddit.com/r/RascalBotTest/wiki/index).")
+                bot_parent.mod.lock()
+                c_submission.mod.approve()
+                cur = main.conn.cursor()
+                cur.execute("UPDATE bot_comments SET (timestamp, action) = (NOW(), %s) WHERE id = %s", ("Review", parent_id))
+                cur.close()
+            else:
+                print("Failed to find source info. Replying to comment.")
+                this_comment = bot_reply(new_comment, "RascalBot was unable to detect a link in this message.\n\n"
+                                         "If you believe this is a mistake, please send a modmail so the team can fix RascalBot\n\n---")
+                this_comment.mod.distinguish()
+        else:
+            print("The parent is not being monitored for replies right now.")
     else:
         print("Ignoring boring/distinguished comment.")
         return
