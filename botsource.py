@@ -130,14 +130,6 @@ def main():
 def posts_check(new_post):
     # Check for existing sticky
     if not find_sticky(new_post):
-        if new_post.subreddit.display_name == "WoWAnarchy" or new_post.subreddit.display_name == "RascalBotTest":
-            if not new_post.link_flair_text:
-                print("Detected missing flair. Assigned flair \"True Anarchy\".")
-                new_post.mod.flair(text="True Anarchy")
-            if not new_post.link_flair_text or not "Question" in new_post.link_flair_text:
-                print("Detected post " + new_post.id + " as new Anarchy.")
-                this_comment = bot_reply(new_post, "This is an automated reply. Neat\n\n---")
-                this_comment.mod.distinguish(sticky=True)
         if not new_post.link_flair_text:
             pass
         elif "Question" in new_post.link_flair_text:
