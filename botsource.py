@@ -141,8 +141,10 @@ def posts_check(new_post):
         elif main.cfg["advanced"]["manage_art"] and "Art" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Art submission.")
             this_comment = bot_reply(new_post, "Hi! RascalBot has removed your art post until you link your source!\n\n"
-                                     "Please reply to this comment with a link to the source. If the post is OC,"
-                                     " please respond with \"I made this\".\n\n---", True)
+                                     "Please reply to this comment with one of the following:\n\n"
+                                     "* A link to the artist's portfolio, social media, or reddit profile.\n"
+                                     "* \"I made this\", if the art is original content.\n"
+                                     "* \"Tattoo\", if you don't wish to reveal your location by sharing studio details.\n\n---", True)
             print("Stickying source request (" + this_comment.id + ") and hiding post.")
             new_post.mod.remove()
             print("Saving comment ID to database.")
@@ -255,22 +257,25 @@ def comments_check(new_comment):
             link_info = None
             # Check comment for some sort of link with or without markdown
             link_parse = re.search(r"((?:\[.*\])|(?:https*:\/\/))\(?((?:https*:\/\/)?[^\s\)]*)\)?(?:\s|$)", new_comment.body)
-            if "I made this" in new_comment.body:
-                link_info = "This art was created by the OP! RascalBot is impressed!"
-            elif not link_parse is None:
+            if not link_parse is None:
                 # Use own markdown for bare link
                 if "http" in link_parse.group(1):
                     link_info = "[Link to Source](" + link_parse.group(1) + link_parse.group(2) + ")"
                 # Use submitter's markdown for formatted link
                 elif "[" in link_parse.group(1):
                      link_info = link_parse.group()
+            elif "i made this" in new_comment.body.lower():
+                link_info = "This art was created by the OP! RascalBot is impressed!"
+            elif "tattoo" in new_comment.body.lower():
+                link_info = ("RascalBot does not require users to potentially doxx themselves " +
+                             "when posting tattoo images! No source required.")
             if not link_info is None:
                 print("Detected source information. Updating sticky & database.")
                 bot_parent = new_comment.parent()
                 bot_parent.edit("Source submitted by " + new_comment.author.name + ":\n\n"
                                           + link_info + "\n\n---"
                                           "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's "
-                                          "[^test ^sub ^wiki](http://reddit.com/r/RascalBotTest/wiki/index).")
+                                          "[^wowmeta ^post](https://www.reddit.com/r/wowmeta/comments/jdtn0i/).")
                 bot_parent.mod.lock()
                 c_submission.mod.approve()
                 cur = main.conn.cursor()
