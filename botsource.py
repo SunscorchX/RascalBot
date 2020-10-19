@@ -140,8 +140,10 @@ def posts_check(new_post):
         # Hide and respond to all posts tagged "Art"
         elif main.cfg["advanced"]["manage_art"] and "Art" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Art submission.")
-            this_comment = bot_reply(new_post, "Hi! RascalBot has removed your art post until you link your source!\n\n"
-                                     "Please reply to this comment with one of the following:\n\n"
+            this_comment = bot_reply(new_post, "Hello! RascalBot has removed your art post until you link your source.\n\n"
+                                     "Remember, the artist must be credited in the **title** too! (Except for tattoo posts.)  \n"
+                                     "If you haven't done that, resubmit your post with title credit and don't reply to this comment.\n\n---\n\n"
+                                     "If you did give credit in the title, please reply to this comment with one of the following:\n\n"
                                      "* A link to the artist's portfolio, social media, or reddit profile.\n"
                                      "* \"I made this\", if the art is original content.\n"
                                      "* \"Tattoo\", if you don't wish to reveal your location by sharing studio details.\n\n---", True)
@@ -199,7 +201,7 @@ def comments_check(new_comment):
     ss_regex = re.compile(r"""
         (?:((?:can'?t|know|learn|god|fuck|shit|damn?|next\stime).*?)|\s|^)
         (?:screen\s?shot|print\s?screen)
-        (.*?(?:\?|can'?t|key|button|god|fuck|shit|damn?|next\stime))?
+        (.*?(?:can'?t|key|button|god|fuck|shit|damn?|next\stime))?
         """, re.IGNORECASE|re.VERBOSE)
     ss_match = ss_regex.search(new_comment.body)
     if re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body) and not new_comment.distinguished and not new_comment.removed:
