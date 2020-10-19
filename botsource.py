@@ -164,8 +164,6 @@ def posts_check(new_post):
             print("Is someone complaining about balance? Respond!")
             bot_reply(new_post,"RascalBot likes this old saying:\n\n> Players are great at finding problems and terrible at finding solutions.\n\n"
                       "Feedback in the form of proposed changes is less useful than your feelings on the current mechanics.\n\n---")
-        else:
-            print("No action required.")
     else:
         print("Found post with a sticky. Weird.")
 
@@ -199,11 +197,16 @@ def comments_check(new_comment):
         c_submission.link_flair_text = ""
     # Construct regex for screenshot bullshit
     ss_regex = re.compile(r"""
-        (?:((?:can'?t|know|learn|god|fuck|shit|damn?|next\stime).*?)|\s|^)
-        (?:screen\s?shot|print\s?screen)
-        (.*?(?:can'?t|key|button|god|fuck|shit|damn?|next\stime))?
+        (?:^|[\.!\?])(?:[^\.!\?\n]*?                                            # Start capture at new line/sentence, continue for * sentence characters
+        (can'?t|know|learn|god|fuck|shit|damn?|next\stime)                      # Try to capture pre-keyword indicators
+        )?[^\.!\?\n]*?                                                          # Continue for * sentence characters
+        (?:screen\s?shot|print\s?screen)                                        # Match key words "screenshot" or "printscreen"
+        (?:[^\.!\?\n]*?                                                         # Continue for * sentence characters
+        (can'?t|key|button|god|fuck|shit|damn?|next\stime)                      # Try to match post-keyword indicators
+        )?[^\.!\?\n]*?(?:[\.!\?\n]|$)                                           # End capture after * sentence characters followed by sentence end
         """, re.IGNORECASE|re.VERBOSE)
     ss_match = ss_regex.search(new_comment.body)
+    ss_flag = False
     if re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body) and not new_comment.distinguished and not new_comment.removed:
         found_command = re.search(r"(?:^|\s)!([a-zA-Z]*\b)", new_comment.body).group(1)
         eligible = False
@@ -289,14 +292,20 @@ def comments_check(new_comment):
                                          "If you believe this is a mistake, please send a modmail so the team can fix RascalBot\n\n---")
         else:
             print("The parent is not being monitored for replies right now.")
-    elif main.cfg["comments"]["reply_ss"] and not ss_match is None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
-        print("Found crappy \"screenshot\" comment. Responding.")
-        this_comment = bot_reply(new_comment, "RascalBot senses you might be being a dick about someone not using Print Screen.\n\n"
-                                 "Don't be like that.\n\n---")
-    else:
-        print("No action required.")
-        return
-
+    elif main.cfg["comments"]["reply_ss"] and ss_match is not None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
+        # Check for disqualifying indicators here
+        if "because" not in ss_match.group():
+            ss_flag = True
+            print("Found crappy \"screenshot\" comment. Responding.")
+            this_comment = bot_reply(new_comment, "RascalBot wants you to know that "
+                                    "telling people to use a screenshot isn't all that helpful.\n\n" 
+                                    "Let's just not do that anymore.\n\n---")
+    if ss_match is not None and not new_comment.distinguished:
+        print("Saving comment to ss_record.")
+        cur = main.conn.cursor()
+        cur.execute("INSERT INTO ss_record (content, flag) VALUES (%s, %s)",
+            (ss_match.group(), ss_flag))
+        cur.close
 
 def report_analysis(report):
     if not main.cfg["other"]["old_reports"]:
