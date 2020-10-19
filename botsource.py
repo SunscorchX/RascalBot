@@ -136,7 +136,7 @@ def posts_check(new_post):
     # Check for existing sticky
     if not find_sticky(new_post):
         if not new_post.link_flair_text:
-            pass
+            print("No flair. Let Autobot handle it!")
         # Hide and respond to all posts tagged "Art"
         elif main.cfg["advanced"]["manage_art"] and "Art" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Art submission.")
@@ -191,6 +191,8 @@ def bot_reply(target,body,c_sticky=False):
 
 def comments_check(new_comment):
     c_submission = new_comment.submission
+    if not c_submission.link_flair_text:
+        c_submission.link_flair_text = ""
     # Construct regex for screenshot bullshit
     ss_regex = re.compile(r"""
         (?:((?:can'?t|know|learn|god|fuck|shit|damn?|next\stime).*?)|\s|^)
