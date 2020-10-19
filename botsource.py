@@ -184,7 +184,7 @@ def error_pm(comment,command,eligible):
 
 def bot_reply(target,body,c_sticky=False):
     # Add generic bot footer to all bot comments, return created comment
-    body += "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's [^wowmeta ^post](https://www.reddit.com/r/wowmeta/comments/jdtn0i/)."
+    body += "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's [^wowmeta ^post](https://www.reddit.com/r/wowmeta/comments/jdtn0i/)^."
     reply = target.reply(body)
     reply.disable_inbox_replies()
     reply.mod.distinguish(sticky=c_sticky)
@@ -275,7 +275,7 @@ def comments_check(new_comment):
                 bot_parent.edit("Source submitted by " + new_comment.author.name + ":\n\n"
                                           + link_info + "\n\n---"
                                           "\n\n^For ^more ^info ^on ^RascalBot, ^check ^RascalBot's "
-                                          "[^wowmeta ^post](https://www.reddit.com/r/wowmeta/comments/jdtn0i/).")
+                                          "[^wowmeta ^post](https://www.reddit.com/r/wowmeta/comments/jdtn0i/)^.")
                 bot_parent.mod.lock()
                 c_submission.mod.approve()
                 cur = main.conn.cursor()
