@@ -10,6 +10,7 @@
 * Automatically ignores (approves) any report on a post/comment older than six months.
 * Prints exceptions to server log and continues main loop, rather than crashing.
 * Distinguishes (sticky optional) and turns off reply notifications to all bot comments.
+* Loads config.json on start to determine which modules are active.
 
 #### Basic Post Processing:
 * Re-processes any post that has its link flair edited.
