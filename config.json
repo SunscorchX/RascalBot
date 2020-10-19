@@ -1,0 +1,20 @@
+{
+    "active_sub":"RascalBotTest",
+    "posts":{
+        "reply_questions":true,
+        "reply_balance":true
+    },
+    "comments":{
+        "faq_commands":true,
+        "clear_faq":true,
+        "random_commands":true,
+        "reply_ss":true
+    },
+    "advanced":{
+        "manage_art":true
+    },
+    "other":{
+		"old_reports":true,
+        "error_pm":true
+    }
+}

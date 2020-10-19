@@ -3,6 +3,7 @@ import praw
 import os
 import re
 import time
+import json
 import pprint
 import random
 import psycopg2
@@ -64,7 +65,11 @@ def classdict_constructor():
 def main():
     reddit = authenticate()
     reddit.validate_on_submit = True
-    active_sub = "RascalBotTest"
+    
+    print("Importing config settings.")
+    # Opening config.json
+    with open("config.json") as jsonfile:
+        main.cfg = json.load(jsonfile)
     
     print("Opening database connection.")
     # Open database connection
@@ -88,10 +93,10 @@ def main():
     waiting = 0
     
     # Iterate through new posts and comments one by one
-    post_stream = reddit.subreddit(active_sub).stream.submissions(pause_after=-1, skip_existing=True)
-    flair_stream = reddit.subreddit(active_sub).mod.stream.log(action="editflair", pause_after=-1, skip_existing=True)
-    report_stream = reddit.subreddit(active_sub).mod.stream.reports(pause_after=-1, skip_existing=True)
-    comment_stream = reddit.subreddit(active_sub).stream.comments(pause_after=-1, skip_existing=True)
+    post_stream = reddit.subreddit(main.cfg["active_sub"]).stream.submissions(pause_after=-1, skip_existing=True)
+    flair_stream = reddit.subreddit(main.cfg["active_sub"]).mod.stream.log(action="editflair", pause_after=-1, skip_existing=True)
+    report_stream = reddit.subreddit(main.cfg["active_sub"]).mod.stream.reports(pause_after=-1, skip_existing=True)
+    comment_stream = reddit.subreddit(main.cfg["active_sub"]).stream.comments(pause_after=-1, skip_existing=True)
 
     while True:
         try:
@@ -133,7 +138,7 @@ def posts_check(new_post):
         if not new_post.link_flair_text:
             pass
         # Hide and respond to all posts tagged "Art"
-        elif "Art" in new_post.link_flair_text:
+        elif main.cfg["advanced"]["manage_art"] and "Art" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Art submission.")
             this_comment = bot_reply(new_post, "Hi! RascalBot has removed your art post until you link your source!\n\n"
                                      "Please reply to this comment with a link to the source. If the post is OC,"
@@ -146,20 +151,24 @@ def posts_check(new_post):
                         (this_comment.id, "Source"))
             cur.close()
         # Add generic FAQ response to all posts tagged "Question"
-        elif "Question" in new_post.link_flair_text:
+        elif main.cfg["posts"]["reply_questions"] and "Question" in new_post.link_flair_text:
             print("Detected post " + new_post.id + " as new Question.")
             this_comment = bot_reply(new_post, "Beep boop. I noticed that you're asking a question!\n\n---", True)
             sticky_exists = True
         # Add snark to any post talking about balance
-        if "balance" in new_post.title.lower()+new_post.selftext.lower():
+        elif main.cfg["posts"]["reply_balance"] and "balance" in new_post.title.lower()+new_post.selftext.lower():
             print("Is someone complaining about balance? Respond!")
             bot_reply(new_post,"RascalBot likes this old saying:\n\n> Players are great at finding problems and terrible at finding solutions.\n\n"
                       "Feedback in the form of proposed changes is less useful than your feelings on the current mechanics.\n\n---")
+        else:
+            print("No action required.")
     else:
         print("Found post with a sticky. Weird.")
 
 
 def error_pm(comment,command,eligible):
+    if not main.cfg["other"]["error_pm"]:
+        return
     print("Sending PM to " + comment.author.name + " for trying to use \"!" + command + "\".")
     extra_line = ""
     # Add extra info to PM if user does not meet command requirements
@@ -195,7 +204,7 @@ def comments_check(new_comment):
         if new_comment.subreddit.display_name in main.mod_list or (new_comment.author.comment_karma >= 50 and (time.time() - int(new_comment.author.created_utc) >= 604800)):
             eligible = True
         faq_response = faq_lookup(found_command,new_comment)
-        if "Question" in c_submission.link_flair_text and faq_response and eligible:
+        if main.cfg["comments"]["faq_commands"] and "Question" in c_submission.link_flair_text and faq_response and eligible:
             print("Found FAQ command \"!" + found_command + "\".")
             find_sticky(c_submission,True)
             faq_comment = bot_reply(new_comment.submission,faq_response, True)
@@ -204,14 +213,13 @@ def comments_check(new_comment):
             print("Setting post flair to \"FAQ Response\".")
             c_submission.mod.flair(text="FAQ Response")
             return
-        elif "FAQ Response" in c_submission.link_flair_text and new_comment.is_submitter and found_command == "clearfaq":
+        elif main.cfg["comments"]["clear_faq"] and "FAQ Response" in c_submission.link_flair_text and new_comment.is_submitter and found_command == "clearfaq":
             print("Found \"!clearfaq\" command. Resetting flair.")
             find_sticky(c_submission,True)
             new_comment.mod.remove()
             c_submission.mod.flair(text="Question")
             return
-        elif "random" in found_command:
-            new_comment.mod.remove()
+        elif main.cfg["comments"]["random_commands"] and "random" in found_command:
             choices = []
             trim_command = found_command.replace("random","")
             for name,specs in main.classdict.items():
@@ -233,7 +241,7 @@ def comments_check(new_comment):
         print("Removing comment with invalid \"!" + found_command + "\" code.")
         new_comment.mod.remove()
         error_pm(new_comment,found_command,eligible)
-    elif "Art" in c_submission.link_flair_text and new_comment.is_submitter and c_submission.removed:
+    elif main.cfg["advanced"]["manage_art"] and "Art" in c_submission.link_flair_text and new_comment.is_submitter and c_submission.removed:
         parent_id = re.search(r"t[13]_(.*)", new_comment.parent_id).group(1)
         # Checking database for comment ID
         cur = main.conn.cursor()
@@ -272,16 +280,18 @@ def comments_check(new_comment):
                                          "If you believe this is a mistake, please send a modmail so the team can fix RascalBot\n\n---")
         else:
             print("The parent is not being monitored for replies right now.")
-    elif not ss_match is None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
+    elif main.cfg["comments"]["reply_ss"] and not ss_match is None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
         print("Found crappy \"screenshot\" comment. Responding.")
         this_comment = bot_reply(new_comment, "RascalBot senses you might be being a dick about someone not using Print Screen.\n\n"
                                  "Don't be like that.\n\n---")
     else:
-        print("Ignoring boring/distinguished comment.")
+        print("No action required.")
         return
 
 
 def report_analysis(report):
+    if not main.cfg["other"]["old_reports"]:
+        return
     content_age = time.time() - report.created_utc
     #limit = 604800
     limit = 15768000
