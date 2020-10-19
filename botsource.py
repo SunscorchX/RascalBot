@@ -316,8 +316,6 @@ def report_analysis(report):
     if content_age >= limit:
         print("Old-ass report found. Automatically approving.")
         report.mod.approve()
-    else:
-        print("No automatic action required.")
 
 
 def faq_lookup(c,comment):
