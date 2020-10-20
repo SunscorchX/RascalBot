@@ -8,7 +8,7 @@
         "faq_commands":true,
         "clear_faq":true,
         "random_commands":true,
-        "reply_ss":true
+        "reply_ss":false
     },
     "advanced":{
         "manage_art":true
