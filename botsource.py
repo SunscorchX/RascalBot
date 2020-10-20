@@ -292,7 +292,7 @@ def comments_check(new_comment):
                                          "If you believe this is a mistake, please send a modmail so the team can fix RascalBot\n\n---")
         else:
             print("The parent is not being monitored for replies right now.")
-    elif main.cfg["comments"]["reply_ss"] and ss_match is not None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
+    elif main.cfg["comments"]["reply_ss"] and not new_comment.distinguished and ss_match is not None and (ss_match.group(1) is not None or ss_match.group(2) is not None):
         # Check for disqualifying indicators here
         if "because" not in ss_match.group():
             ss_flag = True
@@ -316,8 +316,6 @@ def report_analysis(report):
     if content_age >= limit:
         print("Old-ass report found. Automatically approving.")
         report.mod.approve()
-    else:
-        print("No automatic action required.")
 
 
 def faq_lookup(c,comment):
